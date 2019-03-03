@@ -2,24 +2,17 @@
  * @file spinlock.c
  * @provides lock_create, lock_free, lock_acquire, lock_release.
  *
- * Embedded Xinu, Copyright (C) 2008, 2018. All rights reserved.
  */
-
-
-//Spinlock v1.0
-//Written by: Tom Panozzo and Shayne Burns
-// TA-BOT:MAILTO thomaspanozzo@marquette.edu shayne.burns@marquette.edu
-
-
+/* Embedded Xinu, Copyright (C) 2008. All rights reserved. */
 
 #include <xinu.h>
 
-struct lockent locktab[NLOCK];  /* spinlock table */
+struct lockent locktab[NLOCK];	/* spinlock table */
 
 /* Assembly helper functions in spinlock_util.S */
-extern void _lock_acquire(unsigned int *);
-extern void _lock_release(unsigned int *);
-extern int _atomic_lock_check(unsigned int *);
+extern void _lock_acquire(volatile unsigned int *);	
+extern void _lock_release(volatile unsigned int *);	
+extern int  _atomic_lock_check(unsigned int *);
 
 static spinlock_t lock_alloc(void);
 
@@ -29,16 +22,16 @@ static spinlock_t lock_alloc(void);
  */
 spinlock_t lock_create()
 {
-    spinlock_t lock;
-
-    lock = lock_alloc();
-    if (SYSERR == lock)
-    {
-        return SYSERR;
-    }
-
-    locktab[lock].lock = SPINLOCK_UNLOCKED;
-    return lock;
+	spinlock_t lock;
+	
+	lock = lock_alloc();
+	if (SYSERR == lock)
+	{
+		return SYSERR;
+	}
+	
+	locktab[lock].lock = SPINLOCK_UNLOCKED;
+	return lock;
 }
 
 /**
@@ -55,12 +48,12 @@ spinlock_t lock_create()
  */
 syscall lock_free(spinlock_t lock)
 {
-    if (isbadlock(lock))
-        return SYSERR;
+	if (isbadlock(lock))
+		return SYSERR;
 
-    locktab[lock].state = SPINLOCK_FREE;
-
-    return OK;
+	locktab[lock].state = SPINLOCK_FREE;
+	
+	return OK;	
 }
 
 /**
@@ -70,17 +63,16 @@ syscall lock_free(spinlock_t lock)
  */
 syscall lock_acquire(spinlock_t lock)
 {
-    // TODO: First, check if lock is a valid lock.
-    //       Next, call _lock_acquire assembly subroutine
-    //       and properly set "core" field of lockent struct        
-
 	if (isbadlock(lock))
+	{
 		return SYSERR;
-
-	_lock_acquire(&locktab[lock].lock);
+	}
+	
+	_lock_acquire(&(locktab[lock].lock));
 	locktab[lock].core = getcpuid();
 
-    return OK;
+	return OK;
+
 }
 
 /**
@@ -90,15 +82,11 @@ syscall lock_acquire(spinlock_t lock)
  */
 syscall lock_release(spinlock_t lock)
 {
-    // TODO: Check if lock is a valid lock.
-    //       Call _lock_release assembly subroutine and
-    //       reset "core" field of lockent struct
-	
 	if (isbadlock(lock))
 		return SYSERR;
-
-	_lock_release(&locktab[lock].lock);
+	
 	locktab[lock].core = -1;
+	_lock_release(&(locktab[lock].lock));
 
 	return OK;
 }
@@ -111,19 +99,17 @@ syscall lock_release(spinlock_t lock)
  */
 static spinlock_t lock_alloc(void)
 {
-    int i;
-    static spinlock_t nextlock = 0;
+	int i;
+	static spinlock_t nextlock = 0;
 
-    /* check all entries */
-    for (i = 0; i < NLOCK; i++)
-    {
-        nextlock = (nextlock + 1) % NLOCK;
-        if (0 ==
-            _atomic_lock_check((unsigned int *)
-                               &(locktab[nextlock].state)))
-        {
-            return nextlock;
-        }
-    }
-    return SYSERR;
+	/* check all entries */	
+	for (i = 0; i < NLOCK; i++)
+	{
+		nextlock = (nextlock + 1) % NLOCK;
+		if (0 == _atomic_lock_check((unsigned int *)&(locktab[nextlock].state)))
+		{
+			return nextlock;
+		}
+	}
+	return SYSERR;
 };

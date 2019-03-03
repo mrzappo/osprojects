@@ -3,7 +3,7 @@
  *
  * Initialization code for Embedded Xinu on the Raspberry Pi.
  *
- * Embedded Xinu, Copyright (C) 2013, 2018.  All rights reserved.
+ * Embedded Xinu, Copyright (C) 2013.  All rights reserved.
  *
  * -----------------------------------------------------------------------------------------
  * 
@@ -91,14 +91,14 @@ _start:
 .balign	0x20
 .globl _vectors
 _vectors:
-	ldr pc, reset_addr	/* Reset handler */
-	ldr pc, undef_addr	/* Undefined instruction handler */
-	ldr pc, swi_addr	/* Software interrupt handler */
-	ldr pc, prefetch_addr	/* Prefetch abort handler */
-	ldr pc, abort_addr	/* Data abort handler */
-	ldr pc, reserved_addr	/* Reserved */
-	ldr pc, irq_addr	/* IRQ (Interrupt request) handler */
-	ldr pc, fiq_addr	/* FIQ (Fast interrupt request) handler */
+	ldr pc, reset_addr    /* Reset handler */
+	ldr pc, undef_addr	  /* Undefined instruction handler */
+	ldr pc, swi_addr	  /* Software interrupt handler */
+	ldr pc, prefetch_addr /* Prefetch abort handler */
+	ldr pc, abort_addr	  /* Data abort handler */
+	ldr pc, reserved_addr /* Reserved */
+	ldr pc, irq_addr	  /* IRQ (Interrupt request) handler */
+	ldr pc, fiq_addr	  /* FIQ (Fast interrupt request) handler */
 
 reset_addr:     .word reset_handler
 undef_addr:     .word reset_handler
@@ -153,8 +153,8 @@ reset_handler:
 	/* Clear the .bss section of the kernel.  */
 	ldr r0, =_bss
 	ldr r1, =_end
-	mov r2, #0
-	mov r3, #0
+  	mov r2, #0
+    mov r3, #0
 	mov r4, #0
 	mov r5, #0
   	b bssloopa
@@ -200,4 +200,154 @@ dmb:
 	.func dmb
 	dmb
 	mov	pc, lr
+	.endfunc
+
+.globl pld
+pld:
+	.func pld
+	pld	[r0]
+	bx	lr
+	.endfunc
+
+.globl pldw
+pldw:
+	.func pldw
+	pldw [r0]
+	bx	lr
+	.endfunc
+
+.globl _atomic_increment_post
+/**
+ * @fn int _atomic_increment_post(int *var)
+ *
+ * Atomically increments specified integer.
+ * (Equivalent to var++ in C).
+ *
+ * @param *var pointer to variable
+ * @return value the variable held prior
+ *         to being incremented.
+ */
+_atomic_increment_post:
+	.func _atomic_increment_post
+	pldw	[r0]
+	ldrex	r1, [r0]	// load
+	mov		r3, r1		// store value in r3
+	add		r1, #1		// increment
+	strex	r2, r1, [r0] // store
+	cmp		r2, #0		// if the store fails, try again
+	bne		_atomic_increment_post
+
+	mov		r0, r3		// return value from r3
+	dmb
+
+	bx	lr
+	.endfunc
+
+.globl _atomic_increment_pre
+/**
+ * @fn int _atomic_increment_pre(int *var)
+ *
+ * Atomically increments specified integer.
+ * (Equivalent to ++var in C).
+ *
+ * @param *var pointer to variable
+ * @return value the variable held after
+ *         being incremented.
+ */
+_atomic_increment_pre:
+	.func _atomic_increment_pre
+	pldw	[r0]
+	ldrex	r1, [r0]	// load
+	add		r1, #1		// increment
+	strex	r2, r1, [r0] // store
+	cmp		r2, #0		// if store fails, try again
+	bne		_atomic_increment_pre
+	
+	mov	r0, r1			// return incremented value
+	dmb
+
+	bx	lr
+	.endfunc
+
+.globl _atomic_increment_limit
+/**
+ * @fn int _atomic_increment_limit(int *var, int limit)
+ *
+ * Atomically increment and wrap-around the limit.
+ * Equivalent to var = (var + 1) % limit.
+ * 
+ * @param *var  pointer to variable
+ * @param limit value to wrap-around if
+ *              var exceeds it.
+ * @return incremented var value
+ */
+_atomic_increment_limit:
+	.func _atomic_increment_limit
+	pldw	[r0]
+	ldrex	r2, [r0] 		// load
+	add		r2, #1			// increment
+	cmp		r2, r1			// if >= to limit, wrap to zero
+	movge	r2, #0
+	strex	r3, r2, [r0]	// store
+	cmp		r3, #0			// if it fails, retry
+	bne		_atomic_increment_limit
+
+	mov		r0, r2
+	dmb
+
+	bx	lr
+	.endfunc	
+
+
+.globl _atomic_decrement_post
+/**
+ * @fn int _atomic_decrement_post(int *var)
+ *
+ * Atomically decrements specified integer.
+ * (Equivalent to var-- in C).
+ *
+ * @param *var pointer to variable
+ * @return value the variable held prior
+ *         to being deccremented.
+ */
+_atomic_decrement_post:
+	.func _atomic_decrement_post
+	pldw	[r0]
+	ldrex	r1, [r0]	// load
+	mov		r3, r1		// store value in r3
+	sub		r1, #1		// decrement
+	strex	r2, r1, [r0] // store
+	cmp		r2, #0		// if the store fails, try again
+	bne		_atomic_decrement_post
+
+	mov		r0, r3		// return value from r3
+	dmb
+
+	bx	lr
+	.endfunc
+
+.globl _atomic_decrement_pre
+/**
+ * @fn int _atomic_decrement_pre(int *var)
+ *
+ * Atomically decrements specified integer.
+ * (Equivalent to --var in C).
+ *
+ * @param *var pointer to variable
+ * @return value the variable held after
+ *         being decremented.
+ */
+_atomic_decrement_pre:
+	.func _atomic_decrement_pre
+	pldw	[r0]
+	ldrex	r1, [r0]	// load
+	sub		r1, #1		// decrement
+	strex	r2, r1, [r0] // store
+	cmp		r2, #0		// if store fails, try again
+	bne		_atomic_decrement_pre
+	
+	mov	r0, r1			// return decremented value
+	dmb
+
+	bx	lr
 	.endfunc

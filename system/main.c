@@ -12,14 +12,20 @@ void testcases(void);
  * does when it starts up.  The default is designed to do something reasonable
  * on all platforms based on the devices and features configured.
  */
-thread main(void)
+process main(void)
 {
-    kprintf("Hello Xinu World!\r\n");
+	int i = 0;
+	uint cpuid = getcpuid();
 
-    testcases();
+	kprintf("Hello Xinu World! Core %d\r\n", cpuid);
 
-    while (1)
-        ;
+	for (i = 0; i < 10; i++)
+	{
+		kprintf("This is process %d\r\n", currpid[cpuid]);
 
-    return 0;
+		/* Uncomment the resched() line below to see cooperative scheduling. */
+		// resched();
+	}
+
+	return 0;
 }

@@ -2,30 +2,80 @@
  * @file testcases.c
  * @provides testcases
  *
- * Embedded XINU, Copyright (C) 2007, 2019.  All rights reserved.
+ * $Id: testcases.c 175 2008-01-30 01:18:27Z brylow $
+ *
+ * Modified by:
+ *
+ * and
+ *
  */
+/* Embedded XINU, Copyright (C) 2007.  All rights reserved. */
 
 #include <xinu.h>
 
-void print_lockent(int);
+extern void main(int, char *);
 
-/**
- * Testcase functions.  These functions are used as workloads on other
- * cores during various testcases.
- */
-void core_print(void)
+int testmain(int argc, char **argv)
 {
-    uint cpuid;
-    cpuid = getcpuid();
-    while (1)
-        kprintf("Hello World from core %d\r\n", cpuid);
+	uint cpuid = getcpuid();
+    int i = 0;
+    kprintf("Hello XINU World, from core %d!\r\n", cpuid);
+
+    for (i = 0; i < 10; i++)
+    {
+        kprintf("This is process %d\r\n", currpid[cpuid]);
+
+        /* Uncomment the resched() line for cooperative scheduling. */
+       	resched();
+    }
+    return 0;
 }
 
-void core_acquire(spinlock_t lock)
+void testbigargs(int a, int b, int c, int d, int e, int f, int g, int h)
 {
-    lock_acquire(lock);
-    while (1)
-        ;
+    kprintf("Testing bigargs...\r\n");
+    kprintf("a = 0x%08X\r\n", a);
+    kprintf("b = 0x%08X\r\n", b);
+    kprintf("c = 0x%08X\r\n", c);
+    kprintf("d = 0x%08X\r\n", d);
+    kprintf("e = 0x%08X\r\n", e);
+    kprintf("f = 0x%08X\r\n", f);
+    kprintf("g = 0x%08X\r\n", g);
+    kprintf("h = 0x%08X\r\n", h);
+}
+
+void printpcb(int pid)
+{
+    pcb *ppcb = NULL;
+
+    /* Using the process ID, access it in the PCB table. */
+    ppcb = &proctab[pid];
+
+    /* Printing PCB */
+    kprintf("Process name		  : %s \r\n", ppcb->name);
+
+    switch (ppcb->state)
+    {
+    case PRFREE:
+        kprintf("State of the process	  : FREE \r\n");
+        break;
+    case PRCURR:
+        kprintf("State of the process 	  : CURRENT \r\n");
+        break;
+    case PRSUSP:
+        kprintf("State of the process	  : SUSPENDED \r\n");
+        break;
+    case PRREADY:
+        kprintf("State of the process	  : READY \r\n");
+        break;
+    default:
+        kprintf("ERROR: Process state not correctly set!\r\n");
+        break;
+    }
+
+    /* Print PCB contents and registers */
+    kprintf("Base of run time stack    : 0x%08X \r\n", ppcb->stkbase);
+    kprintf("Stack length of process   : %8u \r\n", ppcb->stklen);
 }
 
 /**
@@ -33,124 +83,66 @@ void core_acquire(spinlock_t lock)
  */
 void testcases(void)
 {
-    int c, i, status;
-    spinlock_t testlock;
+    int c, pid;
+
+    kprintf("0) Test creation of one process\r\n");
+    kprintf("1) Test passing of many args\r\n");
+    kprintf("2) Create three processes and run them\r\n");
+	kprintf("3) Create three processes and run them on other cores\r\n");
 
     kprintf("===TEST BEGIN===\r\n");
+
+    // TODO: Test your operating system!
 
     c = kgetc();
     switch (c)
     {
     case '0':
-        // 1 spinlock, create and acquire.
-        // Tests to make sure lock field is being set.
-        // Expected output is that lock field is set to SPINLOCK_LOCKED
-        testlock = lock_create();
-
-		print_lockent(testlock);
-        lock_acquire(testlock);
-        print_lockent(testlock);
-
-        lock_free(testlock);
+		// Process creation testcase
+        pid = create((void *)testmain, INITSTK, "MAIN1", 2, 0, NULL);
+		ready(pid,RESCHED_YES,0);
+		printpcb(pid);
         break;
 
     case '1':
-        // 1 spinlock, acquire and release
-        // Tests to make sure lock field is being set correctly.
-        // Expected output is that lock field is set to SPINLOCK_UNLOCKED.
-        testlock = lock_create();
-
-		print_lockent(testlock);
-        lock_acquire(testlock);
-
-		print_lockent(testlock);
-
-        lock_release(testlock);
-        print_lockent(testlock);
-
-        lock_free(testlock);
-        break;
+		// Many arguments testcase
+        pid = create((void *)testbigargs, INITSTK, "MAIN1", 8,
+                     0x11111111, 0x22222222, 0x33333333, 0x44444444,
+                     0x55555555, 0x66666666, 0x77777777, 0x88888888);
+        pcb *ppcb = NULL;
+		ppcb = &proctab[pid];
+		ulong *stk = ppcb->stkbase;
+		printpcb(pid);
+		
+		for (int i = 0; i < 13; i++)
+		{
+			//x = *stk;
+			//stk++;
+			//kprintf("%x\n\r",x);
+			kprintf("%x\n\r",*(stk-i));
+		}
+	    // TODO: print out stack with extra args
+        // TODO: ready(pid, RESCHED_YES, 0);
+        ready(pid, RESCHED_YES, 0);
+		break;
 
     case '2':
-        // Invalid spinlock test case.
-        // An invalid number is sent to lock_acquire.
-        // This will make sure students do error checking.
-        // Expected output is SYSERR
-        status = lock_acquire(-1);
-        kprintf("status: %s\r\n", (status == SYSERR) ? "SYSERR" : "OK");
+        // Create three copies of a process, and let them play.
+        ready(create((void *)testmain, INITSTK, "MAIN1", 2, 0, NULL), RESCHED_NO , 0);
+        ready(create((void *)testmain, INITSTK, "MAIN2", 2, 0, NULL), RESCHED_NO , 0);
+        ready(create((void *)testmain, INITSTK, "MAIN3", 2, 0, NULL), RESCHED_YES, 0);
         break;
-
-    case '3':
-        // Invalid spinlock test case.
-        // An invalid number is sent to lock_release.
-        // Expected output is SYSERR.
-        status = lock_release(-1);
-        kprintf("status: %s\r\n", (status == SYSERR) ? "SYSERR" : "OK");
-        break;
-
-    case '4':
-		testlock = lock_create();
-        // Acquire lock on another core.
-        // This tests that the core field is being set.
-        // Expected output is that lock field is locked and core field is 1.
-		unparkcore(1, (void *) core_acquire, (void *) testlock); //Acquire lock on core 1       
-        print_lockent(testlock); //Should print out that core 1 has the lock
-
-		lock_free(testlock);
-		// TODO: Write this testcase.
-        break;
-
-    case '5':
-		testlock = lock_create();
-        // Core competition test case.
-        // Core 0 will acquire the lock, then unpark the other cores
-        // which will try to also acquire the lock.
-        //
-        // The other cores should not be able to acquire the lock.. 
-        // if they do then the lock is not working properly.
-        //
-        // Expected output is that the core field should be 0.
-		lock_acquire(testlock); //Lock with core 0
-		print_lockent(testlock); //Print out that core 0 has the lock
-
-		unparkcore(1,(void *)core_acquire, (void *) testlock); //Attempt to acquire the lock on other cores
-		unparkcore(2,(void *)core_acquire, (void *) testlock);
-		unparkcore(3,(void *)core_acquire, (void *) testlock);
-
-		print_lockent(testlock); //Core 0 should still have the lock
-
-        lock_free(testlock);
-        break;
-
-    default:
-        // Default testcase.
-        // Output is non-deterministic.
-        //
-        // Unpark the cores and set them to print.
-        // If output is coherent, then the serial lock is working.
-
-        unparkcore(1, (void *)core_print, NULL);
-        unparkcore(2, (void *)core_print, NULL);
-        unparkcore(3, (void *)core_print, NULL);
+	
+	case '3':
+		// Create 3 processes and ready them on cores 1, 2, 3
+		ready(create((void *)testmain, INITSTK, "MAIN1", 2, 0, NULL), RESCHED_NO, 1);
+		ready(create((void *)testmain, INITSTK, "MAIN2", 2, 0, NULL), RESCHED_NO, 2);
+		ready(create((void *)testmain, INITSTK, "MAIN3", 2, 0, NULL), RESCHED_NO, 3);
+		break;
+	default:
+		break;
     }
-
 
     kprintf("\r\n===TEST END===\r\n");
     return;
-}
-
-void print_lockent(int index)
-{
-    struct lockent *lentry;
-    lentry = &locktab[index];
-
-    kprintf("%d->state: %s\r\n", index,
-            (lentry->state ==
-             SPINLOCK_FREE) ? "SPINLOCK_FREE" : "SPINLOCK_USED");
-    kprintf("%d->lock:  %s\r\n", index,
-            (lentry->lock ==
-             SPINLOCK_UNLOCKED) ? "SPINLOCK_UNLOCKED" :
-            "SPINLOCK_LOCKED");
-    kprintf("%d->core:  %d\r\n", index, lentry->core);
-    kprintf("\r\n");
 }

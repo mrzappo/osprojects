@@ -162,16 +162,16 @@ syscall kputc(uchar c)
  */
 syscall kprintf(const char *format, ...)
 {
-	spinlock_t lock = lock_create();
+	//spinlock_t lock = lock_create();
     int retval;
     va_list ap;
 //TODO: Surround the three lines below with a lock_acquire and lock_release thing
 
-    lock_acquire(lock);
+    lock_acquire(serial_lock);
 	va_start(ap, format);
     retval = _doprnt(format, ap, (int (*)(int, int))kputc, 0);
     va_end(ap);
-	lock_release(lock);
+	lock_release(serial_lock);
 
     return retval;
 }
